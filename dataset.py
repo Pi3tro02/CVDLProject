@@ -1,0 +1,74 @@
+from monai.data import CacheDataset, DataLoader, load_decathlon_datalist
+from monai.transforms import (
+    Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd,
+    ScaleIntensityRanged, CropForegroundd, RandCropByPosNegLabeld,
+    RandFlipd, RandScaleIntensityd, RandShiftIntensityd, ToTensord
+)
+import os
+from glob import glob
+
+def get_data_dicts(data_dir):
+    data_dicts = []
+
+    for patient_id in sorted(os.listdir(data_dir)):
+        patient_dir = os.path.join(data_dir, patient_id, "preRT")
+        if not os.path.isdir(patient_dir):
+            continue
+
+        image_list = glob(os.path.join(patient_dir, "*_T2.nii*"))
+        label_list = glob(os.path.join(patient_dir, "*_mask.nii*"))
+
+        if not image_list or not label_list:
+            print(f"[Warning] File mancanti per {patient_dir}")
+            continue
+
+        data_dicts.append({
+            "image": image_list[0],
+            "label": label_list[0]
+        })
+
+    return data_dicts
+
+def get_loaders(train_dir, val_dir, batch_size, patch_size):
+    train_transforms = Compose([
+        LoadImaged(keys=["image", "label"]),
+        EnsureChannelFirstd(keys=["image", "label"]),
+        Orientationd(keys=["image", "label"], axcodes="RAS"),
+        Spacingd(keys=["image", "label"], pixdim=(1.5, 1.5, 2.0), mode=("bilinear", "nearest")),
+        ScaleIntensityRanged(keys=["image"], a_min=0, a_max=2000,
+                             b_min=0.0, b_max=1.0, clip=True),
+        CropForegroundd(keys=["image", "label"], source_key="image"),
+        RandCropByPosNegLabeld(
+            keys=["image", "label"],
+            label_key="label",
+            spatial_size=patch_size,
+            pos=1,
+            neg=1,
+            num_samples=4,
+            image_key="image",
+            image_threshold=0,
+        ),
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+        RandScaleIntensityd(keys="image", factors=0.1, prob=0.5),
+        RandShiftIntensityd(keys="image", offsets=0.1, prob=0.5),
+        ToTensord(keys=["image", "label"]),
+    ])
+
+    val_transforms = Compose([
+        LoadImaged(keys=["image", "label"]),
+        EnsureChannelFirstd(keys=["image", "label"]),
+        Orientationd(keys=["image", "label"], axcodes="RAS"),
+        Spacingd(keys=["image", "label"], pixdim=(1.5, 1.5, 2.0), mode=("bilinear", "nearest")),
+        ScaleIntensityRanged(keys=["image"], a_min=0, a_max=2000,
+                             b_min=0.0, b_max=1.0, clip=True),
+        CropForegroundd(keys=["image", "label"], source_key="image"),
+        ToTensord(keys=["image", "label"]),
+    ])
+
+    train_ds = CacheDataset(data=get_data_dicts(train_dir), transform=train_transforms, cache_rate=1.0)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+
+    val_ds = CacheDataset(data=get_data_dicts(val_dir), transform=val_transforms, cache_rate=1.0)
+    val_loader = DataLoader(val_ds, batch_size=1)
+
+    return train_loader, val_loader
