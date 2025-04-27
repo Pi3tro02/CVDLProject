@@ -11,4 +11,3 @@ def get_model():
         norm='batch',
     )
     return model
-    

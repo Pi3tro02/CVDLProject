@@ -8,4 +8,4 @@ TEST_DIR = os.path.join(DATA_DIR, "test")
 PATCH_SIZE = (96, 96, 32)
 BATCH_SIZE = 2
 NUM_EPOCHS = 100
-LR = 1e-4
+LR = 2e-4
