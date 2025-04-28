@@ -9,7 +9,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     model = get_model()
-    train_loader, val_loader = get_loaders(TRAIN_DIR, TEST_DIR, BATCH_SIZE, PATCH_SIZE)
+    train_loader, val_loader = get_loaders(TRAIN_DIR, TRAIN_DIR2 , TEST_DIR, BATCH_SIZE, PATCH_SIZE)
     for batch in train_loader:
         print(batch["label"].max(), batch["label"].min(), batch["label"].unique())
         break

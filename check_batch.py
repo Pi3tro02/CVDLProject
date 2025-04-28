@@ -25,4 +25,3 @@ def plot_batch(loader, device="cpu"):
     plt.axis('off')
 
     plt.show()
-    

@@ -4,17 +4,21 @@ from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from monai.inferers import sliding_window_inference
 from tqdm import tqdm
+from config import LR
 
-class BCEDiceLoss(torch.nn.Module):
-    def __init__(self):
+class WeightedBCEDiceLoss(torch.nn.Module):
+    def __init__(self, bce_weight=0.3, dice_weight=0.7):
         super().__init__()
         self.bce = torch.nn.BCEWithLogitsLoss()
-        self.dice = DiceLoss(sigmoid=True)  # MONAI DiceLoss
+        self.dice = DiceLoss(sigmoid=True)
+
+        self.bce_weight = bce_weight
+        self.dice_weight = dice_weight
 
     def forward(self, inputs, targets):
         bce_loss = self.bce(inputs, targets)
         dice_loss = self.dice(inputs, targets)
-        return bce_loss + dice_loss
+        return self.bce_weight * bce_loss + self.dice_weight * dice_loss
 
 def evaluate(model, val_loader, device, num_classes):
     model.eval()
@@ -31,7 +35,7 @@ def evaluate(model, val_loader, device, num_classes):
             labels = (labels > 0).float()
 
             # Calcola l'output del modello
-            outputs = sliding_window_inference(inputs, roi_size=(96, 96, 32), sw_batch_size=1, predictor=model)
+            outputs = sliding_window_inference(inputs, roi_size=(128, 128, 48), sw_batch_size=1, predictor=model)
             
             # Applica sigmoid e threshold a 0.5 per ottenere la maschera binaria
             outputs = torch.sigmoid(outputs)
@@ -46,8 +50,8 @@ def evaluate(model, val_loader, device, num_classes):
 
 def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="best_model.pth"):
     model.to(device)
-    loss_function = BCEDiceLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr)
+    loss_function = WeightedBCEDiceLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10, factor=0.5)
     
     best_val_dice = -1.0  # inizializza il peggiore valore possibile
@@ -66,7 +70,6 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="be
             # Etichetta: fai un threshold per ottenere valori 0 o 1 (binary mask)
             labels = (labels > 0).float()  # Assicurati che le etichette siano binarie
 
-            # La loss non ha bisogno di One Hot Encoding in questo caso
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -88,3 +91,4 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="be
             best_val_dice = val_dice
             torch.save(model.state_dict(), save_path)
             print(f"Saved new best model at epoch {epoch+1} with Val Dice {val_dice:.4f}")
+            

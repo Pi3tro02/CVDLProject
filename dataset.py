@@ -30,7 +30,7 @@ def get_data_dicts(data_dir):
 
     return data_dicts
 
-def get_loaders(train_dir, val_dir, batch_size, patch_size):
+def get_loaders(train_dir, train_dir2, val_dir, batch_size, patch_size):
     train_transforms = Compose([
         LoadImaged(keys=["image", "label"]),
         EnsureChannelFirstd(keys=["image", "label"]),
@@ -86,11 +86,23 @@ def get_loaders(train_dir, val_dir, batch_size, patch_size):
                              b_min=0.0, b_max=1.0, clip=True),
         CropForegroundd(keys=["image", "label"], source_key="image"),
         Resized(keys=["image", "label"], spatial_size=patch_size, mode=("trilinear", "nearest")),
+        RandCropByPosNegLabeld(
+            keys=["image", "label"],
+            label_key="label",
+            spatial_size=patch_size,
+            pos=1,
+            neg=1,
+            num_samples=1,
+            image_key="image",
+            image_threshold=0,
+        ),
         ToTensord(keys=["image", "label"]),
         EnsureTyped(keys=["image", "label"]),
     ])
 
-    train_ds = CacheDataset(data=get_data_dicts(train_dir), transform=train_transforms, cache_rate=1.0)
+    train_data = get_data_dicts(train_dir) + get_data_dicts(train_dir2)
+
+    train_ds = CacheDataset(data=train_data, transform=train_transforms, cache_rate=1.0)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
     val_ds = CacheDataset(data=get_data_dicts(val_dir), transform=val_transforms, cache_rate=1.0)
