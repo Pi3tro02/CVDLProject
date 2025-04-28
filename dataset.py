@@ -3,7 +3,7 @@ from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd,
     ScaleIntensityRanged, CropForegroundd, RandCropByPosNegLabeld,
     RandFlipd, RandScaleIntensityd, RandShiftIntensityd, ToTensord,
-    EnsureTyped, Resized, RandAffined, Rand3DElasticd, RandZoomd
+    EnsureTyped, Resized, RandAffined, Rand3DElasticd, RandZoomd, DivisiblePadd, CenterSpatialCropd
 )
 import os
 from glob import glob
@@ -39,6 +39,7 @@ def get_loaders(train_dir, train_dir2, val_dir, batch_size, patch_size):
         ScaleIntensityRanged(keys=["image"], a_min=0, a_max=2000,
                              b_min=0.0, b_max=1.0, clip=True),
         CropForegroundd(keys=["image", "label"], source_key="image"),
+        DivisiblePadd(keys=["image", "label"], k=16),
         RandCropByPosNegLabeld(
             keys=["image", "label"],
             label_key="label",
@@ -86,16 +87,8 @@ def get_loaders(train_dir, train_dir2, val_dir, batch_size, patch_size):
                              b_min=0.0, b_max=1.0, clip=True),
         CropForegroundd(keys=["image", "label"], source_key="image"),
         Resized(keys=["image", "label"], spatial_size=patch_size, mode=("trilinear", "nearest")),
-        RandCropByPosNegLabeld(
-            keys=["image", "label"],
-            label_key="label",
-            spatial_size=patch_size,
-            pos=1,
-            neg=1,
-            num_samples=1,
-            image_key="image",
-            image_threshold=0,
-        ),
+        DivisiblePadd(keys=["image", "label"], k=16),
+        CenterSpatialCropd(keys=["image", "label"], roi_size=patch_size),
         ToTensord(keys=["image", "label"]),
         EnsureTyped(keys=["image", "label"]),
     ])

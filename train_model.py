@@ -4,7 +4,7 @@ from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from monai.inferers import sliding_window_inference
 from tqdm import tqdm
-from config import LR
+from config import LR, VAL_INTERVAL  # importa anche VAL_INTERVAL
 
 class WeightedBCEDiceLoss(torch.nn.Module):
     def __init__(self, bce_weight=0.3, dice_weight=0.7):
@@ -28,16 +28,12 @@ def evaluate(model, val_loader, device, num_classes):
         for batch_data in val_loader:
             inputs, labels = batch_data["image"].to(device), batch_data["label"].to(device)
 
-            # Se labels hanno più dimensioni (4D), rendili 3D
             if labels.ndim == 4:
                 labels = labels.unsqueeze(1)
 
             labels = (labels > 0).float()
 
-            # Calcola l'output del modello
-            outputs = sliding_window_inference(inputs, roi_size=(128, 128, 48), sw_batch_size=1, predictor=model)
-            
-            # Applica sigmoid e threshold a 0.5 per ottenere la maschera binaria
+            outputs = sliding_window_inference(inputs, roi_size=(128, 128, 64), sw_batch_size=1, predictor=model)
             outputs = torch.sigmoid(outputs)
             predicted = (outputs > 0.5).float()
 
@@ -51,10 +47,14 @@ def evaluate(model, val_loader, device, num_classes):
 def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="best_model.pth"):
     model.to(device)
     loss_function = WeightedBCEDiceLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=10, factor=0.5)
-    
+
     best_val_dice = -1.0  # inizializza il peggiore valore possibile
+
+    # LISTE PER SALVARE I VALORI PER IL PLOTTING
+    epoch_loss_values = []
+    metric_values = []
 
     for epoch in range(num_epochs):
         model.train()
@@ -66,9 +66,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="be
             optimizer.zero_grad()
 
             outputs = model(inputs)
-
-            # Etichetta: fai un threshold per ottenere valori 0 o 1 (binary mask)
-            labels = (labels > 0).float()  # Assicurati che le etichette siano binarie
+            labels = (labels > 0).float()  # binarizza
 
             loss = loss_function(outputs, labels)
             loss.backward()
@@ -79,16 +77,21 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, save_path="be
 
         avg_loss = epoch_loss / step
         print(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}")
+        epoch_loss_values.append(avg_loss)  # <-- salva la loss media dell'epoch
 
-        # VAL
-        val_dice = evaluate(model, val_loader, device, num_classes=1)  # Modifica num_classes a 1 per binario
-        print(f"Validation Dice: {val_dice:.4f}")
+        # VALIDAZIONE OGNI VAL_INTERVAL
+        if (epoch + 1) % VAL_INTERVAL == 0:
+            val_dice = evaluate(model, val_loader, device, num_classes=1)
+            print(f"Validation Dice: {val_dice:.4f}")
+            metric_values.append(val_dice)  # <-- salva la metrica
 
-        scheduler.step(val_dice)
+            scheduler.step(val_dice)
 
-        # SALVA IL MIGLIORE MODELLO
-        if val_dice > best_val_dice:
-            best_val_dice = val_dice
-            torch.save(model.state_dict(), save_path)
-            print(f"Saved new best model at epoch {epoch+1} with Val Dice {val_dice:.4f}")
-            
+            # SALVA IL MIGLIOR MODELLO
+            if val_dice > best_val_dice:
+                best_val_dice = val_dice
+                torch.save(model.state_dict(), save_path)
+                print(f"Saved new best model at epoch {epoch+1} with Val Dice {val_dice:.4f}")
+
+    return epoch_loss_values, metric_values  # <-- ritorna
+    
