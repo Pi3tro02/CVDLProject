@@ -1,7 +1,7 @@
 import torch
 import monai
 import os
-from monai.losses import DiceFocalLoss
+from monai.losses import DiceFocalLoss, DiceLoss
 from monai.metrics import DiceMetric
 from monai.inferers import sliding_window_inference
 from tqdm import tqdm
