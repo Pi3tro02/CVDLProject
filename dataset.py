@@ -3,19 +3,22 @@ from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd,
     ScaleIntensityRanged, CropForegroundd, RandCropByPosNegLabeld,
     RandFlipd, RandScaleIntensityd, RandShiftIntensityd, ToTensord,
-    EnsureTyped, Resized, RandAffined, Rand3DElasticd, RandZoomd, DivisiblePadd, CenterSpatialCropd
+    EnsureTyped, Resized, RandAffined, Rand3DElasticd, RandZoomd, DivisiblePadd, CenterSpatialCropd, RandGaussianNoised
 )
 import os
 from glob import glob
 
+## Function that iters the patients' directories in the dataset
 def get_data_dicts(data_dir):
     data_dicts = []
 
+    # Iteration of the dataset
     for patient_id in sorted(os.listdir(data_dir)):
         patient_dir = os.path.join(data_dir, patient_id, "preRT")
         if not os.path.isdir(patient_dir):
             continue
 
+        # Looks for image and mask
         image_list = glob(os.path.join(patient_dir, "*_T2.nii*"))
         label_list = glob(os.path.join(patient_dir, "*_mask.nii*"))
 
@@ -23,18 +26,22 @@ def get_data_dicts(data_dir):
             print(f"[Warning] File mancanti per {patient_dir}")
             continue
 
+        # If it finds the files, it adds them in a list as a dictionary image, label
         data_dicts.append({
             "image": image_list[0],
             "label": label_list[0]
         })
 
+    print(f"[Debug] Aggiunto: {data_dicts[-1]}")
     return data_dicts
 
+## Function that prepares the transformations for training and validation, and creates datasets and dataloaders
 def get_loaders(train_dir, train_dir2, val_dir, batch_size, patch_size):
+    # Training
     train_transforms = Compose([
         LoadImaged(keys=["image", "label"]),
-        EnsureChannelFirstd(keys=["image", "label"]),
-        Orientationd(keys=["image", "label"], axcodes="RAS"),
+        EnsureChannelFirstd(keys=["image", "label"]), 
+        Orientationd(keys=["image", "label"], axcodes="RAS"), 
         Spacingd(keys=["image", "label"], pixdim=(1.5, 1.5, 2.0), mode=("bilinear", "nearest")),
         ScaleIntensityRanged(keys=["image"], a_min=0, a_max=2000,
                              b_min=0.0, b_max=1.0, clip=True),
@@ -74,10 +81,12 @@ def get_loaders(train_dir, train_dir2, val_dir, batch_size, patch_size):
         ),
         RandScaleIntensityd(keys="image", factors=0.1, prob=0.5),
         RandShiftIntensityd(keys="image", offsets=0.1, prob=0.5),
+        RandGaussianNoised(keys=["image"], prob=0.2, mean=0.0, std=0.1),
         ToTensord(keys=["image", "label"]),
         EnsureTyped(keys=["image", "label"]),
     ])
 
+    # Validation
     val_transforms = Compose([
         LoadImaged(keys=["image", "label"]),
         EnsureChannelFirstd(keys=["image", "label"]),

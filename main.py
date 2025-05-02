@@ -5,6 +5,7 @@ from train_model import train
 from check_batch import plot_batch
 from plotting import plot_training_curves
 from inference import load_model, visualize_inference
+from visualize_prediction import visualize_prediction
 
 import torch
 import os
@@ -19,16 +20,16 @@ def main():
         break
     plot_batch(train_loader)
 
-    epoch_loss_values, metric_values = train(model, train_loader, val_loader, device, NUM_EPOCHS, LR)
+    epoch_loss_values, metric_values = train(model, train_loader, val_loader, device, NUM_EPOCHS, LR, save_path=SAVE_PATH)
 
     plot_training_curves(epoch_loss_values, metric_values, VAL_INTERVAL)
 
     # 6. Ricarica best model
-    model_path = os.path.join(DATA_DIR, "best_metric_model.pth")  # usa la tua variabile per la root
+    model_path = SAVE_PATH
     model = load_model(model, model_path, device)
 
-    # 7. Visualizza inferenza
-    visualize_inference(model, val_loader, device)
+    # 7. Visualizza predizione
+    visualize_prediction(model, val_loader, device, num_samples=3, save_dir="visualize_prediction.png")
 
 if __name__ == "__main__":
     main()

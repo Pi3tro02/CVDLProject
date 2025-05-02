@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from monai.inferers import sliding_window_inference
 
 def load_model(model, model_path, device):
-    model.load_state_dict(torch.load(model_path, map_location=device), weights_only=True)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
     return model
